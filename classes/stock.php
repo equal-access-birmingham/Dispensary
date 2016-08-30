@@ -12,4 +12,14 @@ class Stock
     {
         
     }
+
+    // Search terms to consider
+    // generic name
+    // brand name
+    // Note:  might be better in Stock object
+    public function lookupDrug()
+    {
+
+    }
+
 }
