@@ -1,5 +1,5 @@
 <?php
-require_once("../includes/db.php");
+require("../includes/db.php");
 class Drug
 {
     public $generic_name;
@@ -11,7 +11,7 @@ class Drug
     public function __construct($generic_name, $brand_name, $formulation, $dose, $unit, $con)
     {
         // Physician characteristics
-        $this->generic_name = $generic_name;
+        $this->generic_name = $generic_name; 
         $this->brand_name = $brand_name;
         $this->formulation = $formulation;
         $this->dose = $dose;
@@ -55,11 +55,8 @@ class Drug
 			$stmt_DrugNameId->execute();
 			$drug_name_id = $stmt_DrugNameId->fetch()[0];
 			
-			$drug_dose_id = $this->findDrugDoseId($this->dose);
+			$drug_dose_id = $this->findDrugDoseId($this->dose, $this->unit);
 			
-			echo $formulation_id;
-			echo $drug_name_id;
-			echo $drug_dose_id;
 			$query = "INSERT INTO `Drugs` (`FormulationId`, `DrugNameId`, `DrugDoseId`) VALUES (:formulationid, :drugnameid, :drugdoseid);";
 			$stmt_drugs = $this->con->prepare($query);
 			$stmt_drugs->bindParam(":formulationid", $formulation_id);
@@ -85,10 +82,10 @@ class Drug
         $drugnameid = $stmt_search->fetch()[0];
 		
 		$query = "UPDATE `DrugNames` SET `GenericName` = (:newname) WHERE `DrugNameId` = (:drugnameid);";
-		$stmt_editname = $this->con->prepare($query);
-		$stmt_editname->bind_param(":newname",$newname);
-		$stmt_editname->bind_param(":drugnameid",$drugnameid);
-		$stmt_editname->execute();
+		$stmt_change_name = $this->con->prepare($query);
+        $stmt_change_name->bindParam(":newname", $newname);
+        $stmt_change_name->bindParam(":drugnameid", $drugnameid);
+        $stmt_change_name->execute();
 		
 		$this->generic_name = $newname;
     }
@@ -141,9 +138,9 @@ class Drug
 
         return $unit_id;
     }
-	private function findDrugDoseId($unit)
+	private function findDrugDoseId($dose, $unit)
     {
-		$drug_units = $this->findUnitId($this->unit);
+		$unit_id = $this->findUnitId($unit);
 		
         // query for primary key of selected drug units
         $query = "SELECT `DrugDoseId` FROM `DrugDoses` WHERE `Dose` = :dose and `UnitId` = :unitid;";
@@ -167,7 +164,7 @@ class Drug
             $unit_id = $stmt_find_drug_dose_id->fetch()[0];
         }
 
-        return $drug_dose_id;
+        return $drug_dose_id; 
     }
 }
 try {
@@ -177,11 +174,8 @@ try {
     echo "Error: " . $e->getMessage() . "\n";
 }
 
-$drug = new Drug("naproxen", "alleve", "Oral",130, "mg", $con);
-echo $drug->generic_name . "\n";
-echo $drug->brand_name . "\n";
-echo $drug->formulation . "\n";
-echo $drug->dose . "\n";
-echo $drug->unit . "\n";
-$drug->storeDrug();
+$drug = new Drug("citalopram", "Celexa", "Oral",500, "g", $con);
+//$drug->storeDrug(); 
+//$drug->deleteDrug("acetaminophen");
+//$drug->editName("psych");
 ?>

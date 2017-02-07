@@ -1,5 +1,5 @@
 <?php
-class LookupLabs.php
+class LookupStock
 {
     
 }

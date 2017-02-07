@@ -1,8 +1,26 @@
 <?php
+/**
+ * LabComponent class that interacts with the LabComponent table in the database to create
+ *     individual pieces of lab tests
+ * Example: LabTest = Blood Panel; LabComponent = Hgb
+ * (Finished and tested)
+ */
 class LabComponent
 {
+    /**
+     * @var string $name The name of the lab component
+     */
     public $name;
+
+    /**
+     * @var string $default_units The default units for this lab component to use
+     */
     public $default_units;
+
+    /**
+     * @var PDO $con Database connection
+     */
+    private $con;
 
     /**
      * Initializes the LabComponent object by giving it a name, default units, and a database connection
@@ -12,6 +30,10 @@ class LabComponent
      */
     public function __construct($name, $default_units, PDO $con)
     {
+        // if ($name == null || $default_units == null) {
+        //     throw new Exception("Both the lab component name and the default units for the lab must be provided");
+        // }
+
         if (! is_string($name) && ! is_string($default_units)) {
             throw new Exception("Both the lab component name and the default units for the lab must be strings");
         }
@@ -25,7 +47,7 @@ class LabComponent
     }
 
     /**
-     * Helper function that finds the database primary key for a provided unit measure
+     * Helper function that finds the database primary key for a provided unit measure and inserts it if not found
      * @param string $unit The unit measure to find the primary key for
      * @return int
      */
@@ -58,7 +80,7 @@ class LabComponent
      * Verifies that the lab component exists in the database already
      * @return boolean
      */
-    private function inDatabase()
+    public function inDatabase()
     {
         // Query to see if lab component is in the database already
         $query = "SELECT COUNT(*) FROM `LabTestsComponents` WHERE `LabTestComponent` = :LabTestComponent;";
@@ -96,6 +118,25 @@ class LabComponent
         $stmt_insert_component->bindParam(":LabTestComponent", $this->name);
         $stmt_insert_component->bindParam(":LabTestComponentDefaultUnitId", $drug_units);
         $stmt_insert_component->execute();
+    }
+
+    /**
+     * Returns the id of the lab component from the database
+     * @return int
+     */
+    public function getId()
+    {
+        // Lab component is not in the database and therefore has no ID to retrieve
+        if (! $this->inDatabase()) {
+            throw new Exception("The lab component has not been stored in the database");
+        }
+
+        // Query to retrieve the lab test components id
+        $query = "SELECT `LabTestComponentId` FROM `LabTestsComponents` WHERE `LabTestComponent` = :LabTestComponent;";
+        $stmt_component_id = $this->con->prepare($query);
+        $stmt_component_id->bindParam(":LabTestComponent", $this->name);
+        $stmt_component_id->execute();
+        return $stmt_component_id->fetch()[0];
     }
 
     /**
@@ -189,5 +230,6 @@ class LabComponent
 // $lab_component = new LabComponent("bill", "%", $con);
 // echo $lab_component->name . "\n";
 // echo $lab_component->default_units . "\n";
+// $lab_component->store();
 // $lab_component->editDefaultUnits("mg");
 // echo $lab_component->default_units . "\n";
