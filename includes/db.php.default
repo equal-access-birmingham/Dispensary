@@ -1,0 +1,5 @@
+<?php
+$host = "your_host";
+$db_name = "database_name";
+$user = "database_user_name";
+$pass = "super_secure_user_password";
