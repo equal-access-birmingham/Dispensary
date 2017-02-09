@@ -25,13 +25,29 @@
  */
 class LabOrder
 {
+    /**
+     * @var Lab $lab The lab object associated with the lab order
+     */
     public $lab;
+
+    /**
+     * @var Patient $patient The patient object the lab order is for
+     */
     public $patient;
+
+    /**
+     * @var Physician $physician The physician object doing the ordering
+     */
     public $physician;
+
+    /**
+     * @var string $date_ordered The date the lab was/is ordered
+     */
     public $date_ordered;
-    public $date_results;
-    public $value;
-    public $unit;
+
+    // public $date_results;
+    // public $value;
+    // public $unit;
 
     /**
      * @var PDO $con Database connection
