@@ -2,6 +2,26 @@
 /**
  * LabOrder class that allows a Lab (lab panel to be more precise) to be ordered by a physician
  *     for a patient
+ * 
+ * Public Method List
+ *  - labTestInDatabase
+ *  - labOrderInDatabase
+ *  - getLabTestId
+ *  - getLabOrderIds
+ *  - createLabOrder
+ *  - deleteLabOrder
+ *  - addResult
+ *  - changePhysician
+ *  - changePatient
+ *  - changeDateOrdered
+ *  - getDateResults
+ *  - changeDateResults
+ *  - getValue
+ *  - changeValue
+ *  - getUnits
+ *  - changeUnits
+
+ * (Finished NOT tested)
  */
 class LabOrder
 {
@@ -252,6 +272,7 @@ class LabOrder
      * @param float $value The value of the lab result
      * @param string $unit The units associated with the value
      * @param string $date The date that the result came in
+     * @return void
      */
     public function addResult(LabComponent $lab_component, $value, $unit, $date)
     {
@@ -292,8 +313,6 @@ class LabOrder
         $stmt_add_result->execute();
 
         // Add values to object
-        $this->value = $value;
-        $this->unit = $unit;
         $this->date_results = $date;
     }
 
@@ -333,6 +352,7 @@ class LabOrder
     /**
      * Changes the patient that the lab was ordered for
      * @param Patient $patient The new patient to put on the order
+     * @return void
      */
     public function changePatient(Patient $patient)
     {
@@ -363,8 +383,150 @@ class LabOrder
         $this->patient = $patient;
     }
 
+    /**
+     * Changes the order date of the lab order
+     * @param string $date The date to change the lab order to
+     * @return void
+     */
+    public function changeDateOrdered($date)
+    {
+        // Check for valid date
+        if (! preg_match("/^[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}$/", $date)) {
+            throw new Exception("The date must be in the format YYYY-MM-DD");
+        }
+
+        // Lab order not in the database, store and move on (not sure about this one, as it might be better to throw an exception instead)
+        if (! $this->labOrderInDatabase()) {
+            $this->createLabOrder();
+        }
+
+        // lab test for the given patient is not in the database, which is a serious problem
+        if (! $this->labTestInDatabase($lab_component)) {
+            throw new Exception("This lab test has not been ordered for the patient");
+        }
+
+        // Acquire IDs for query
+        $patient_id = $this->patient->getId();
+        $physician_id = $this->physician->getId();
+        $lab_test_id = $this->lab->getLabTestId();
+
+        // Query to change ordering physician through update
+        $query = "UPDATE `PatientLabTests` SET `PatientLabTests`.`DateOrdered` = :NewDateOrdered
+                    INNER JOIN `LabComponentsAssocation` ON `PatientLabTests`.`LabComponentAssociationId` = `LabComponentsAssociation`.`LabComponentAssociationId`
+                    WHERE `PatientLabTests`.`PatientId` = :PatientId AND `PatientLabTests`.`PhysicianId` = :PhysicianId AND `LabComponentsAssociation`.`LabTestId` = :LabTestId AND `PatientLabTests`.`DateOrdered` = :DateOrdered;";
+        $stmt_change_patient = $this->con->prepare($query);
+        $stmt_change_patient->bindParam(":NewDateOrdered", $date);
+        $stmt_change_patient->bindParam(":PatientId", $patient_id);
+        $stmt_change_patient->bindParam(":PhysicianId", $physician_id);
+        $stmt_change_patient->bindParam(":LabTestId", $lab_test_id);
+        $stmt_change_patient->bindParam(":DateOrdered", $this->date_ordered);
+        $stmt_change_patient->execute();
+
+        // Update object property
+        $this->date_ordered = $date;
+    }
+
+    /**
+     * Acquires the result dates of a single lab component from a lab order
+     * @param LabComponent $lab_component The lab component of the lab order to retrieve the result date from
+     * @return void
+     */
+    public function getDateResults(LabComponent $lab_component)
+    {
+        // Lab order not in the database, store and move on (not sure about this one, as it might be better to throw an exception instead)
+        if (! $this->labOrderInDatabase()) {
+            throw new Exception("The lab hasn't been stored yet, and won't have a value");
+        }
+
+        // lab test for the given patient is not in the database, which is a serious problem
+        if (! $this->labTestInDatabase($lab_component)) {
+            throw new Exception("This lab test has not been ordered for the patient");
+        }
+
+        // Get the lab test id to pull the value
+        $lab_test_id = $this->getLabTestId($lab_component);
+
+        $query = "SELECT `DateResults` FROM `PatientLabTests` WHERE `PatientLabTestId` = :PatientLabTestId;";
+        $stmt_get_result_date = $this->con->prepare($query);
+        $stmt_get_result_date->bindParam(":PatientLabTestId", $lab_test_id);
+        $stmt_get_result_date->execute();
+        return $stmt_get_result_date->fetch()[0] ? : "N/A";
+    }
+
+    /**
+     * Updates a single result date for a lab component of a lab order
+     * @param LabComponent $lab_component The lab component of the lab order to update the result date for
+     * @param string $date The date to update the result date of the lab component to
+     * @return void
+     */
+    public function changeDateResults(LabComponent $lab_component, $date)
+    {
+        // Check for valid date
+        if (! preg_match("/^[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}$/", $date)) {
+            throw new Exception("The date must be in the format YYYY-MM-DD");
+        }
+
+        // Lab order not in the database, store and move on (not sure about this one, as it might be better to throw an exception instead)
+        if (! $this->labOrderInDatabase()) {
+            $this->createLabOrder();
+        }
+
+        // lab test for the given patient is not in the database, which is a serious problem
+        if (! $this->labTestInDatabase($lab_component)) {
+            throw new Exception("This lab test has not been ordered for the patient");
+        }
+
+        // Acquire IDs for query
+        $lab_test_id = $this->getLabTestId();
+
+        // Query to change the date of the results for the lab order
+        $query = "UPDATE `PatientLabTests` SET `DateResults` = :NewDateResults WHERE `PatientLabTestId` = :PatientLabTestId;";
+        $stmt_change_patient = $this->con->prepare($query);
+        $stmt_change_patient->bindParam(":NewDateResults", $date);
+        $stmt_change_patient->bindParam(":LabTestId", $lab_test_id);
+        $stmt_change_patient->execute();
+    }
+
+    /**
+     * Retrieves the value of a specific lab component for a lab order (returns "N/A" if no value exists)
+     * @param LabComponent $lab_component The lab component of the lab order to retrieve the value of
+     * @return string
+     */
+    public function getValue(LabComponent $lab_component)
+    {
+        // Lab order not in the database, store and move on (not sure about this one, as it might be better to throw an exception instead)
+        if (! $this->labOrderInDatabase()) {
+            throw new Exception("The lab hasn't been stored yet, and won't have a value");
+        }
+
+        // lab test for the given patient is not in the database, which is a serious problem
+        if (! $this->labTestInDatabase($lab_component)) {
+            throw new Exception("This lab test has not been ordered for the patient");
+        }
+
+        // Get the lab test id to pull the value
+        $lab_test_id = $this->getLabTestId($lab_component);
+
+        $query = "SELECT `Value` FROM `PatientLabTests` WHERE `PatientLabTestId` = :PatientLabTestId;";
+        $stmt_get_value = $this->con->prepare($query);
+        $stmt_get_value->bindParam(":PatientLabTestId", $lab_test_id);
+        $stmt_get_value->execute();
+        return $stmt_get_value->fetch()[0] ? : "N/A";
+    }
+
+    /**
+     * Changes the value of a specific lab component in the lab order
+     * @param LabComponent $lab_component The lab component of the lab order to change the value of
+     * @param float $value The value to change the lab component to
+     * @return void
+     */
     public function changeValue(LabComponent $lab_component, $value)
     {
+        // clean input
+        if (! is_numeric($value)) {
+            throw new Exception("The value of the lab component must be a number");
+        }
+
         // Lab order not in the database, store and move on (not sure about this one, as it might be better to throw an exception instead)
         if (! $this->labOrderInDatabase()) {
             $this->createLabOrder();
@@ -377,13 +539,24 @@ class LabOrder
 
         // lab test id for the current component to have the results updated
         $lab_test_id = $this->getLabTestId($lab_component);
+
+        $query = "UPDATE `PatientLabTests` SET `Value` = :Value WHERE `PatientLabTestId` = :PatientLabTestId;";
+        $stmt_change_value = $this->con->prepare($query);
+        $stmt_change_value->bindParam(":Value", $value);
+        $stmt_change_value->bindParam(":PatientLabTestId", $lab_test_id);
+        $stmt_change_value->execute();
     }
 
-    public function changeDateOrdered(LabComponent $lab_component, $date)
+    /**
+     * Retrieves the human-readable unit for a lab component of a lab order (returns "N/A" if none exists)
+     * @param LabComponent $lab_component The lab component of the lab test to get the unit for
+     * @return string
+     */
+    public function getUnits(LabComponent $lab_component)
     {
         // Lab order not in the database, store and move on (not sure about this one, as it might be better to throw an exception instead)
         if (! $this->labOrderInDatabase()) {
-            $this->createLabOrder();
+            throw new Exception("The lab hasn't been stored yet, and won't have a unit");
         }
 
         // lab test for the given patient is not in the database, which is a serious problem
@@ -391,28 +564,31 @@ class LabOrder
             throw new Exception("This lab test has not been ordered for the patient");
         }
 
-        // lab test id for the current component to have the results updated
+        // Get the lab test id to pull the value
         $lab_test_id = $this->getLabTestId($lab_component);
+
+        $query = "SELECT `Units`.`Unit` FROM `PatientLabTests` 
+                    INNER JOIN `Units` ON `PatientLabTests`.`UnitId` = `Units`.`UnitId`
+                    WHERE `PatientLabTestId` = :PatientLabTestId;";
+        $stmt_get_unit = $this->con->prepare($query);
+        $stmt_get_unit->bindParam(":PatientLabTestId", $lab_test_id);
+        $stmt_get_unit->execute();
+        return $stmt_get_unit->fetch()[0] ? : "N/A";
     }
 
-    public function changeDateResult(LabComponent $lab_component, $date)
-    {
-        // Lab order not in the database, store and move on (not sure about this one, as it might be better to throw an exception instead)
-        if (! $this->labOrderInDatabase()) {
-            $this->createLabOrder();
-        }
-
-        // lab test for the given patient is not in the database, which is a serious problem
-        if (! $this->labTestInDatabase($lab_component)) {
-            throw new Exception("This lab test has not been ordered for the patient");
-        }
-
-        // lab test id for the current component to have the results updated
-        $lab_test_id = $this->getLabTestId($lab_component);
-    }
-
+    /**
+     * Changes the units on a specific lab component of a lab order
+     * @param LabComponent $lab_component The lab component to change the units for
+     * @param string $unit The units to change the lab component too
+     * @return void
+     */
     public function changeUnits(LabComponent $lab_component, $unit)
     {
+        // Clean the input
+        if (! is_string($unit)) {
+            throw new Exception("The units must be a string");
+        }
+
         // Lab order not in the database, store and move on (not sure about this one, as it might be better to throw an exception instead)
         if (! $this->labOrderInDatabase()) {
             $this->createLabOrder();
@@ -425,5 +601,13 @@ class LabOrder
 
         // lab test id for the current component to have the results updated
         $lab_test_id = $this->getLabTestId($lab_component);
+        $unit_id = $this->findUnitId($unit);
+
+        $query = "UPDATE `PatientLabTests` SET `UnitId` = :UnitId WHERE `PatientLabTestId` = :PatientLabTestId;";
+        $stmt_change_units = $this->con->prepare($query);
+        $stmt_change_units->bindParam(":UnitId", $unit_id);
+        $stmt_change_units->bindParam(":PatientLabTestId", $lab_test_id);
+        $stmt_change_units->execute();
+
     }
 }
