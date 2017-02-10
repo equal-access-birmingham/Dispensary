@@ -2,6 +2,17 @@
 /**
  * Establishes a Lab class that interacts with the LabTest table and LabComponentsAssociation
  * This class groups the LabComponents into coherent lab panels that can be ordered
+ *
+ * Public Method List
+ *  - labTestInDatabase
+ *  - labComponentAssociationInDatabase
+ *  - getLabTestId
+ *  - getLabAssociationIds
+ *  - store
+ *  - delete
+ *  - addComponent
+ *  - removeComponent
+ * 
  * (Finished and tested)
  */
 class Lab
@@ -224,6 +235,9 @@ class Lab
         $stmt_add_component->bindParam(":LabTestId", $lab_test_id);
         $stmt_add_component->bindParam(":LabTestComponentId", $lab_component_id);
         $stmt_add_component->execute();
+
+        // TODO: test
+        array_push($this->lab_components, $lab_component);
     }
 
     /**
@@ -257,6 +271,9 @@ class Lab
         $stmt_delete_component->bindParam(":LabTestId", $lab_test_id);
         $stmt_delete_component->bindParam(":LabTestComponentId", $lab_component_id);
         $stmt_delete_component->execute();
+
+        // TODO: test
+        unset($this->lab_components[array_search($lab_component)]);
     }
 }
 

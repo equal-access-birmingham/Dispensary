@@ -3,6 +3,15 @@
  * LabComponent class that interacts with the LabComponent table in the database to create
  *     individual pieces of lab tests
  * Example: LabTest = Blood Panel; LabComponent = Hgb
+ * 
+ * Public Method List
+ *  - inDatabase
+ *  - getId
+ *  - store
+ *  - delete
+ *  - editName
+ *  - editDefaultUnits
+ * 
  * (Finished and tested)
  */
 class LabComponent
@@ -98,29 +107,6 @@ class LabComponent
     }
 
     /**
-     * Adds a new lab component to the database based on the properties of the class
-     * @return void
-     */
-    public function store()
-    {
-        // Lab component already in database and is a duplicate (this could be handled with an exception instead, we'll see later on)
-        if ($this->inDatabase()) {
-            echo $this->name . " is already in the database\n";
-            return;
-        }
-
-        // query for primary key of selected drug units
-        $drug_units = $this->findUnitId($this->default_units);
-
-        // Insert new lab component into database
-        $query = "INSERT INTO `LabTestsComponents` (`LabTestComponent`, `LabTestComponentDefaultUnitId`) VALUES (:LabTestComponent, :LabTestComponentDefaultUnitId);";
-        $stmt_insert_component = $this->con->prepare($query);
-        $stmt_insert_component->bindParam(":LabTestComponent", $this->name);
-        $stmt_insert_component->bindParam(":LabTestComponentDefaultUnitId", $drug_units);
-        $stmt_insert_component->execute();
-    }
-
-    /**
      * Returns the id of the lab component from the database
      * @return int
      */
@@ -140,11 +126,41 @@ class LabComponent
     }
 
     /**
+     * Adds a new lab component to the database based on the properties of the class
+     * @return void
+     */
+    public function store()
+    {
+        /**
+         * TODO: maybe add automagic storage of "Individual " . $this->name Lab as well for ease
+         */
+
+        // Lab component already in database and is a duplicate (this could be handled with an exception instead, we'll see later on)
+        if ($this->inDatabase()) {
+            throw new Exception($this->name . " is already in the database\n");
+        }
+
+        // query for primary key of selected drug units
+        $drug_units = $this->findUnitId($this->default_units);
+
+        // Insert new lab component into database
+        $query = "INSERT INTO `LabTestsComponents` (`LabTestComponent`, `LabTestComponentDefaultUnitId`) VALUES (:LabTestComponent, :LabTestComponentDefaultUnitId);";
+        $stmt_insert_component = $this->con->prepare($query);
+        $stmt_insert_component->bindParam(":LabTestComponent", $this->name);
+        $stmt_insert_component->bindParam(":LabTestComponentDefaultUnitId", $drug_units);
+        $stmt_insert_component->execute();
+    }
+
+    /**
      * Deletes the storage of a LabComponent object from the database
      * @return void
      */
     public function delete()
     {
+        /**
+         * TODO: would need to delete automagic storage of "Individual " . $this->name Lab as well
+         */
+
         if ($this->inDatabase() == false) {
             throw new Exception("The lab component attempting to be deleted does not exist");
         }
