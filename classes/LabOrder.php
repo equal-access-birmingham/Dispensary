@@ -61,6 +61,7 @@ class LabOrder
      * @param Physician $physician The physician that is ordering the lab for the patient
      * @param string $date_ordered The date that the lab was ordered
      * @param PDO $con The database connection for storing the labs
+     * @return void
      */
     public function __construct(Lab $lab, Patient $patient, Physician $physician, $date_ordered, PDO $con)
     {

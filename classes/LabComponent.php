@@ -36,6 +36,7 @@ class LabComponent
      * @param string $name The name of the lab component
      * @param string $default_units The default units that lab will be measured in
      * @param PDO $con The database connection for storing the LabComponent information
+     * @return void
      */
     public function __construct($name, $default_units, PDO $con)
     {

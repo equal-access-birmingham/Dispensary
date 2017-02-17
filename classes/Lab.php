@@ -42,6 +42,8 @@ class Lab
      * @param string $name The name of the lab
      * @param float $cost The cost of ordering the lab
      * @param LabComponents[] $lab_components An array of LabComponents objects that lists the components of the current lab
+     * @param PDO $con The database connection passed to the object
+     * @return void
      */
     public function __construct($name, $cost, $lab_components, PDO $con)
     {
@@ -237,7 +239,7 @@ class Lab
         $stmt_add_component->execute();
 
         // TODO: test
-        array_push($this->lab_components, $lab_component);
+        $this->lab_components[] = $lab_component;
     }
 
     /**
