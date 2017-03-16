@@ -5,10 +5,13 @@
  *
  * Public Method List
  *  - labTestInDatabase
- *  - labComponentAssociationInDatabase
+ *  - labHasLabComponent
  *  - getLabTestId
  *  - getLabAssociationIds
+ *  - getLabComponents
  *  - store
+ *  - editName
+ *  - editCost
  *  - delete
  *  - addComponent
  *  - removeComponent
@@ -45,7 +48,7 @@ class Lab
      * @param PDO $con The database connection passed to the object
      * @return void
      */
-    public function __construct($name, $cost, $lab_components, PDO $con)
+    public function __construct($name, $cost, PDO $con)
     {
         if (! is_string($name) && ! is_numeric($cost) && ! is_array($lab_components)) {
             throw new Exception("The lab name must be a string; the cost must be a number; and the lab components must be an array of LabComponents objects");
@@ -56,10 +59,14 @@ class Lab
 
         // load components
         $this->cost = $cost;
-        $this->lab_components = $lab_components;
-        
+
         // Database connection
         $this->con = $con;
+
+        // load lab components 
+        if ($this->labTestInDatabase()) {
+            $this->lab_components = $this->getLabComponents();
+        }
     }
 
     /**
@@ -87,7 +94,7 @@ class Lab
      * Verifies that the lab association exists in the database already
      * @return boolean
      */
-    private function labComponentAssociationInDatabase(LabComponent $lab_component)
+    private function labHasLabComponent(LabComponent $lab_component)
     {
         // Get IDs for the lab test and the components first
         $lab_test_id = $this->getLabTestId();
@@ -117,7 +124,7 @@ class Lab
     {
         // Lab test is not in the database and therefore the id can't be retrieved
         if (! $this->labTestInDatabase()) {
-            throw new Exception("The lab test is not stored in the database");
+            $this->store();
         }
 
         $query = "SELECT `LabTestId` FROM `LabTests` WHERE `LabTest` = :LabTest;";
@@ -137,13 +144,42 @@ class Lab
             throw new Exception("The lab test is not stored in the database");
         }
 
-        $lab_test_id->getLabTestId();
+        $lab_test_id = $this->getLabTestId();
 
-        $query = "SELECT `LabComponentAssociationId` FROM `LabComponentsAssocations` WHERE `LabTestId` = :LabTestId;";
+        $query = "SELECT `LabComponentAssociationId` FROM `LabComponentsAssociation` WHERE `LabTestId` = :LabTestId;";
         $stmt_lab_components_id = $this->con->prepare($query);
         $stmt_lab_components_id->bindParam(":LabTestId", $lab_test_id);
         $stmt_lab_components_id->execute();
         return $stmt_lab_components_id->fetchAll();
+    }
+
+    /**
+     * Gets the lab components associated with the lab
+     * @return LabComponent[]
+     */
+    public function getLabComponents()
+    {
+        if (! $this->labTestInDatabase()) {
+            throw new Exception("This lab test (" . $this->name . ") is not in the database");
+        }
+
+        $lab_test_id = $this->getLabTestId();
+
+        $query = "SELECT `LabTestsComponents`.`LabTestComponent`, `Units`.`Unit`
+                    FROM `LabComponentsAssociation`
+                    INNER JOIN `LabTestsComponents` USING (`LabTestComponentId`)
+                    INNER JOIN `Units` ON `LabTestsComponents`.`LabTestComponentDefaultUnitId` = `Units`.`UnitId`
+                    WHERE `LabTestId` = :LabTestId;";
+        $stmt_get_lab_components = $this->con->prepare($query);
+        $stmt_get_lab_components->bindParam(":LabTestId", $lab_test_id);
+        $stmt_get_lab_components->execute();
+        
+        $lab_component_array = array();
+        while ($lab_component_info = $stmt_get_lab_components->fetch()) {
+            $lab_component_array[] = new LabComponent($lab_component_info['LabTestComponent'], $lab_component_info['Unit'], $this->con);
+        }
+
+        return $lab_component_array;
     }
 
     /**
@@ -153,7 +189,7 @@ class Lab
     public function store()
     {
         // Lab test is already in the database and should not be allowed to be created again
-        // Editing is the better route is lab components need to be modified
+        // Editing is the better route if lab components need to be modified
         if ($this->labTestInDatabase()) {
             throw new Exception("This lab test is already in the database");
         }
@@ -164,28 +200,58 @@ class Lab
         $stmt_create_lab->bindParam(":LabTest", $this->name);
         $stmt_create_lab->bindParam(":Cost", $this->cost);
         $stmt_create_lab->execute();
-        
-        // Query to insert lab association in the database
-        $query = "INSERT INTO `LabComponentsAssociation` (`LabTestId`, `LabTestComponentId`) VALUES (:LabTestId, :LabTestComponentId);";
-        $stmt_lab_association = $this->con->prepare($query);
-        $stmt_lab_association->bindParam(":LabTestId", $lab_test_id);
-        $stmt_lab_association->bindParam(":LabTestComponentId", $lab_test_component_id);
+    }
 
-        // Associate the lab components with the lab test
-        foreach ($this->lab_components as $lab_component) {
-            if (! $lab_component->inDatabase()) {
-                $lab_component->store();
-            }
-
-            // variables for the prepared query to insert the lab association
-            $lab_test_id = $this->getLabTestId();
-            $lab_test_component_id = $lab_component->getId();
-
-            // As long as the association does not already exist in the database, create it
-            if (! $this->labComponentAssociationInDatabase($lab_component)) {
-                $stmt_lab_association->execute();
-            }
+    /**
+     * Edits the name of the lab test
+     * @param string $name The name to change the lab test to
+     * @return void
+     */
+    public function editName($name)
+    {
+        if (! is_string($name)) {
+            throw new Exception("The lab name (" . $name . ") must be a string");
         }
+
+        if (! $this->labTestInDatabase()) {
+            throw new Exception("The lab test (" . $this->name . ") is NOT in the database");
+        }
+
+        $lab_test_id = $this->getLabTestId();
+
+        $query = "UPDATE `LabTests` SET `LabTest` = :LabTest WHERE `LabTestId` = :LabTestId;";
+        $stmt_edit_name = $this->con->prepare($query);
+        $stmt_edit_name->bindParam(":LabTest", $name);
+        $stmt_edit_name->bindParam(":LabTestId", $lab_test_id);
+        $stmt_edit_name->execute();
+
+        $this->name = $name;
+    }
+
+    /**
+     * Edits the cost of the lab test
+     * @param number $cost The cost to change the lab test to
+     * @return void
+     */
+    public function editCost($cost)
+    {
+        if (! is_numeric($cost)) {
+            throw new Exception("The lab name (" . $cost . ") must be a number");
+        }
+
+        if (! $this->labTestInDatabase()) {
+            throw new Exception("The lab test (" . $this->name . ") is NOT in the database");
+        }
+
+        $lab_test_id = $this->getLabTestId();
+
+        $query = "UPDATE `LabTests` SET `Cost` = :Cost WHERE `LabTestId` = :LabTestId;";
+        $stmt_edit_name = $this->con->prepare($query);
+        $stmt_edit_name->bindParam(":Cost", $cost);
+        $stmt_edit_name->bindParam(":LabTestId", $lab_test_id);
+        $stmt_edit_name->execute();
+
+        $this->cost = $cost;
     }
 
     /**
@@ -213,18 +279,8 @@ class Lab
     public function addComponent(LabComponent $lab_component)
     {
         // Lab component is already a part of the lab test, don't duplicate
-        if ($this->labComponentAssociationInDatabase($lab_component)) {
+        if ($this->labHasLabComponent($lab_component)) {
             throw new Exception("This component is already a part of the current lab test");
-        }
-
-        // If the lab test is not already in the database, simply "make it so"
-        if (! $this->labTestInDatabase()) {
-            $this->store();
-        }
-
-        // If the lab component is not already in the database, simply "make it so"
-        if (! $lab_component->inDatabase()) {
-            $lab_component->store();
         }
 
         // Grab the IDs of the lab test and the component to add
@@ -259,7 +315,7 @@ class Lab
         }
 
         // Lab component is already a part of the lab test, don't duplicate
-        if (! $this->labComponentAssociationInDatabase($lab_component)) {
+        if (! $this->labHasLabComponent($lab_component)) {
             throw new Exception("The lab test doesn't have the component that was attempted to be removed");
         }
 
@@ -284,6 +340,9 @@ class Lab
 //////
 
 // require_once("../includes/db.php");
+// spl_autoload_register(function ($class) {
+//     include $class . '.php';
+// });
 // try {
 //     $con = new PDO("mysql:host=$host;dbname=$db_name", $user, $pass);
 
@@ -291,14 +350,14 @@ class Lab
 //     echo "Error: " . $e->getMessage() . "\n";
 // }
 
-// $lab_components = array(new LabComponent("hct", "mg", $con), new LabComponent("Hb", "mg/dL", $con), new LabComponent("RBC", "", $con));
-// $lab = new Lab("Blood Panel", 25.00, $lab_components, $con);
-
-// foreach ($lab->lab_components as $lab_component) {
-//     echo "Lab component: ". $lab_component->name . "\n";
-// }
+// $lab = new Lab("Blood Panel", 25.00, $con);
 
 // $lab->store();
+// $lab->editName("Ooga");
+// $lab->editCost(2);
 // $lab->delete();
 // $lab->addComponent(new LabComponent("bill", "%", $con));
+
+// print_r($lab->lab_components);
 // $lab->removeComponent(new LabComponent("bill", "%", $con));
+// print_r($lab->lab_components);

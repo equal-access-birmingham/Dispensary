@@ -115,7 +115,7 @@ class LabComponent
     {
         // Lab component is not in the database and therefore has no ID to retrieve
         if (! $this->inDatabase()) {
-            throw new Exception("The lab component has not been stored in the database");
+            $this->store();
         }
 
         // Query to retrieve the lab test components id

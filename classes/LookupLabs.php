@@ -72,50 +72,17 @@ class LookupLabs
         $lab_name .= "%";
 
         // Query to retrieve all labs with their respective components
-        $query =-"SELECT `LabTests`.`LabTest`, `LabTests`.`Cost`, `LabTestsComponents`.`LabTestComponent`, `Units`.`Unit`
-                    FROM `LabTests`
-                    INNER JOIN `LabComponentsAssociation` ON `LabTests`.`LabTestId` = `LabComponentsAssociation`.`LabTestId`
-                    INNER JOIN `LabTestsComponents` ON `LabComponentsAssociation`.`LabTestComponentId` = `LabTestsComponents`.`LabTestComponentId`
-                    INNER JOIN `Units` ON `LabTestsComponents`.`LabTestComponentDefaultUnitId` = `Units`.`UnitId`
-                    WHERE `LabTests`.`LabTest` LIKE :LabTest
-                    ORDER BY `LabTests`.`LabTest`;";
+        $query =-"SELECT `LabTests`.`LabTest`, `LabTests`.`Cost` WHERE `LabTests`.`LabTest` LIKE :LabTest;";
         $stmt_labs = $this->con->prepare($query);
         $stmt_labs->bindParam(":LabTest", $lab_name);
         $stmt_labs->execute();
 
         // Initialize variable to be used in loop through labs with lab components
         $lab_array = array();
-        $previous_lab_name = null;
-        $previous_lab_cost = 0.0;
-        $current_lab_name = null;
-        $current_lab_cost = 0.0;
-        $lab_component_array = array();
 
         // Loop through lab components
         while ($lab_information = $stmt_labs->fetch()) {
-            $current_lab_name = $lab_information['LabTest'];
-            $current_lab_cost = $lab_information['Cost'];
-
-            // Lab information is ordered by lab name, so a new lab name means we have run out of components for the current lab
-            if ($current_lab_name != $previous_lab_name && $current_lab_cost != $previous_lab_cost) {
-
-                // Deals with edge case of first time through loop
-                if ($previous_lab_name !== null) {
-
-                    // We have hit a new lab, add all previous info to a new lab in the array to be returned
-                    $lab_array[] = (new Lab($current_lab_name, $current_lab_cost, $lab_component_array, $this->con));
-                }
-
-                // Reset lab_component array for the new lab
-                $lab_component_array = array();
-            }
-
-            // Add lab components for current lab into an array
-            $lab_component_array[] = (new LabComponent($lab_information['LabTestComponent'], $lab_information['Unit'], $this->con));
-            
-            // Save current state for next loop pass through
-            $previous_lab_name = $current_lab_name;
-            $previous_lab_cost = $current_lab_cost;
+            $lab_array[] = new Lab($lab_information['LabTest'], $lab_information['Cost'], $this->con);
         }
 
         return $lab_array;
@@ -131,7 +98,7 @@ class LookupLabs
      * @param string $lab_component_name The name of the lab component that was ordered
      * @return LabOrder[] An array of lab order objects
      */
-    public function searchLabOrders($physician_last_name, $patient_last_name, $date_ordered, $date_results, $lab_name, $lab_component_name)
+    public function searchLabOrders($patient_last_name, $lab_name, $physician_last_name, $date_ordered)
     {
         if (! is_string($physician_last_name) && ! is_string($patient_last_name) && ! is_string($lab_name) && ! is_string($lab_component_name)) {
             throw new Exception("The physician name ($physician_last_name), patient name ($patient_last_name), lab name ($lab_name), and lab component ($lab_component_name) must be strings");
@@ -150,10 +117,8 @@ class LookupLabs
         $lab_component_name .= "%";
 
         // Query to retrieve all lab orders with their information (lab, patient, physician, date ordered)
-        $query = "SELECT `LabTests`.`LabTest`,
+        $query = "SELECT DISTINCT `LabTests`.`LabTest`,
                         `LabTests`.`Cost`,
-                        `LabTestsComponents`.`LabTestComponent`,
-                        `Units`.`Unit`,
                         `Patient`.`fname` AS `PatientFirstName`,
                         `Patient`.`lname` AS `PatientLastName`,
                         `Patient`.`dob` AS `PatientDob`,
@@ -172,68 +137,29 @@ class LookupLabs
                     INNER JOIN `Patient` ON `PatientLabTests`.`PatientId` = `Patient`.`PatientId`
                     INNER JOIN `Physicians` ON `PatientLabTests`.`PhysicianId` = `Physicians`.`Physicianid`
                     INNER JOIN `Specialties` ON `Specialties`.`SpecialtyId` = `Physicians`.`SpecialtyId`
-                    INNER JOIN `LabComponentsAssociation` ON `LabComponentsAssociation`.`LabComponentAssociationId` = `PatientLabTests`.`LabComponentAssociationId`
                     INNER JOIN `LabTests` ON `LabTests`.`LabTestId` = `LabComponentsAssociation`.`LabTestId`
-                    INNER JOIN `LabTestsComponents` ON `LabComponentsAssociation`.`LabComponentId` = `LabTestsComponents`.`LabComponentId`
-                    INNER JOIN `Units` ON `LabTestsComponents`.`LabTestComponentDefaultUnitId` = `Units`.`UnitId`
-                    WHERE `Physicians`.`LastName` LIKE :PhysicianLastName
-                        AND `Patient`.`lname` LIKE :PatientLastName
-                        AND `PatientLabTests`.`DateOrdered` LIKE :DateOrdered
-                        AND `PatientLabTests`.`DateResults` LIKE :DateResults
+                    WHERE `Patient`.`lname` LIKE :PatientLastName
                         AND `LabTests`.`LabTest` LIKE :LabTest
-                        AND `LabTestComponents` LIKE :LabTestComponents;";
+                        AND `Physicians`.`LastName` LIKE :PhysicianLastName
+                        AND `PatientLabTests`.`DateOrdered` LIKE :DateOrdered;";
         $stmt_lab_order = $this->con->prepare($query);
-        $stmt_lab_order->bindParam(":PhysicianLastName", $physician_last_name);
         $stmt_lab_order->bindParam(":PatientLastName", $patient_last_name);
-        $stmt_lab_order->bindParam(":DateOrdered", $date_ordered);
-        $stmt_lab_order->bindParam(":DateResults", $date_results);
         $stmt_lab_order->bindParam(":LabTest", $lab_name);
-        $stmt_lab_order->bindParam(":LabTestComponents", $lab_component_name);
+        $stmt_lab_order->bindParam(":PhysicianLastName", $physician_last_name);
+        $stmt_lab_order->bindParam(":DateOrdered", $date_ordered);
         $stmt_lab_order->execute();
 
         // Initialize variables to be used for looping through lab orders
         $lab_order_array = array();
-        $lab = null;
-        $current_physician = null;
-        $current_patient = null;
-        $current_lab_name = null;
-        $current_date_ordered = null;
-        $previous_physician = null;
-        $previous_patient = null;
-        $previous_lab_name = null;
-        $previous_date_ordered = null;
-        $lab_component_array = array();
 
         // Go through information from database and package into objects
         while ($lab_order_information = $stmt_lab_order->fetch()) {
-            $current_physician = new Physician($lab_order_information['PhysicianFirstName'], $lab_order_information['PhysicianMiddleName'], $lab_order_information['PhysicianLastName'], $lab_order_information['PhysicianSuffix'], $lab_order_information['PhysicianPhoneNumber'], $lab_order_information['PhysicianEmail'], $lab_order_information['Specialty'], $this->con);
-            $current_patient = new Patient($lab_order_information['PatientFirstName'], $lab_order_information['PatientLastName'], $lab_order_information['PatientDob'], $lab_order_information['PatientAddress'], $lab_order_information['PatientPhoneNumber'], $lab_order_information['PatientEmail'], $this->con);
-            $current_lab_name = $lab_information['LabTest'];
-            $current_date_ordered = $lab_order_information['DateOrdered'];
-
-            // If any of these have changed, then we are at another lab order
-            if ($current_physician != $previous_physician && $current_patient != $previous_patient && $current_lab_name != $previous_lab_name && $current_date_ordered != $previous_date_ordered) {
-                
-                // Address edge case for first pass where nothing is filled
-                if ($previous_physician != null && $previous_patient != null && $previous_lab_name != null && $previous_date_ordered != null) {
-                    
-                    // New lab order (which is specific to lab [set of lab components]); register new lab and store lab order object
-                    $lab = new Lab($lab_information['LabTest'], $lab_order_information['Cost'], $lab_component_array, $this->con);
-                    $lab_order_array[] = new LabOrder($lab, $current_patient, $current_physician, $current_date_ordered, $this->con);
-                }
-
-                // Reset lab components for next lab order
-                $lab_component_array = array();
-            }
-
-            // Add lab components to lab component array for use in lab object for lab order
-            $lab_component_array[] = new LabComponent($lab_order_information['LabTestComponent'], $lab_order_information['Unit'], $this->con);
-
-            // Save previous information for next loop pass through
-            $previous_physician = $current_physician;
-            $previous_patient = $current_patient;
-            $previous_lab_name = $current_lab_name;
-            $previous_date_ordered = $current_date_ordered;
+            $lab_order_array[] = new LabOrder(
+                new Lab($lab_order_information['LabTest'], $lab_order_information['Cost'], $this->con),
+                new Patient($lab_order_information['PatientFirstName'], $lab_order_information['PatientLastName'], $lab_order_information['PatientDob'], $lab_order_information['PatientAddress'], $lab_order_information['PatientPhoneNumber'], $lab_order_information['PatientEmail'], $this->con),
+                new Physician($lab_order_information['PhysicianFirstName'], $lab_order_information['PhysicianMiddleName'], $lab_order_information['PhysicianLastName'], $lab_order_information['PhysicianSuffix'], $lab_order_information['PhysicianPhoneNumber'], $lab_order_information['PhysicianEmail'], $lab_order_information['Specialty'], $this->con),
+                $lab_order_information['DateOrdered']
+            );
         }
 
         return $lab_order_array;

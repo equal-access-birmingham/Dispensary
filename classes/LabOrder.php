@@ -66,7 +66,7 @@ class LabOrder
     public function __construct(Lab $lab, Patient $patient, Physician $physician, $date_ordered, PDO $con)
     {
         // Check for valid date
-        if (! preg_match("/^[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}$/", $date)) {
+        if (! preg_match("/^[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}$/", $date_ordered)) {
             throw new Exception("The date must be in the format YYYY-MM-DD");
         }
 
@@ -88,7 +88,7 @@ class LabOrder
     public function labTestInDatabase(LabComponent $lab_component)
     {
         // Get IDs from objects for query
-        $patient_id = $this->patient->getId();
+        $patient_id = $this->patient->getPatientId();
         $physician_id = $this->physician->getId();
         $lab_test_id = $this->lab->getLabTestId();
         $lab_component_id = $lab_component->getId();
@@ -122,7 +122,7 @@ class LabOrder
     public function labOrderInDatabase()
     {
         // Get IDs from objects for query
-        $patient_id = $this->patient->getId();
+        $patient_id = $this->patient->getPatientId();
         $physician_id = $this->physician->getId();
         $lab_test_id = $this->lab->getLabTestId();
 
@@ -184,7 +184,7 @@ class LabOrder
         }
 
         // Get IDs from objects for query
-        $patient_id = $this->patient->getId();
+        $patient_id = $this->patient->getPatientId();
         $physician_id = $this->physician->getId();
         $lab_test_id = $this->lab->getLabTestId();
 
@@ -254,9 +254,11 @@ class LabOrder
         $physician_id = $this->physician->getId();
         $patient_id = $this->patient->getPatientId();
 
+
         // using the untested function getLabAssociationIds
         // goes through each of the lab components and adds their association to the LabOrder table
-        foreach ($this->lab->getLabAssociationIds() as $lab_component_association_id) {
+        foreach ($this->lab->getLabAssociationIds() as $lab_component_association_info) {
+            $lab_component_association_id = $lab_component_association_info[0];
             $stmt_create_lab->execute();
         }
     }
@@ -273,13 +275,16 @@ class LabOrder
         }
 
         // Query to delete lab orders form the 
-        $query = "DELETE FROM `PatientLabTests` WHERE `PatientLabTestId = :PatientLabTestId;";
+        $query = "DELETE FROM `PatientLabTests` WHERE `PatientLabTestId` = :PatientLabTestId;";
         $stmt_delete_lab_order = $this->con->prepare($query);
         $stmt_delete_lab_order->bindParam(":PatientLabTestId", $patient_lab_test_id);
 
         // Delete the lab order
-        foreach ($this->getLabOrderIds() as $patient_lab_test_id) {
-            $stmt_delete_lab_order->execute();
+        foreach ($this->getLabOrderIds() as $patient_lab_test_info) {
+            $patient_lab_test_id = $patient_lab_test_info[0];
+            if (! $stmt_delete_lab_order->execute()) {
+                echo $stmt_delete_lab_order->errorInfo()[2];
+            }
         }
     }
 
@@ -345,7 +350,7 @@ class LabOrder
         }
 
         // Acquire IDs for query
-        $patient_id = $this->patient->getId();
+        $patient_id = $this->patient->getPatientId();
         $physician_id = $this->physician->getId();
         $lab_test_id = $this->lab->getLabTestId();
         $new_physician_id = $physician->getId();
@@ -379,10 +384,10 @@ class LabOrder
         }
 
         // Acquire IDs for query
-        $patient_id = $this->patient->getId();
+        $patient_id = $this->patient->getPatientId();
         $physician_id = $this->physician->getId();
         $lab_test_id = $this->lab->getLabTestId();
-        $new_patient_id = $patient->getId();
+        $new_patient_id = $patient->getPatientId();
 
         // Query to change ordering physician through update
         $query = "UPDATE `PatientLabTests` SET `PatientLabTests`.`PatientId` = :NewPatientId
@@ -423,7 +428,7 @@ class LabOrder
         }
 
         // Acquire IDs for query
-        $patient_id = $this->patient->getId();
+        $patient_id = $this->patient->getPatientId();
         $physician_id = $this->physician->getId();
         $lab_test_id = $this->lab->getLabTestId();
 
@@ -628,3 +633,48 @@ class LabOrder
 
     }
 }
+
+//////
+// Debugging example: can be run from the terminal with "php <filename>"
+//////
+
+require_once("../includes/db.php");
+spl_autoload_register(function ($class) {
+    include $class . '.php';
+});
+try {
+    $con = new PDO("mysql:host=$host;dbname=$db_name", $user, $pass);
+
+} catch(PDOException $e) {
+    echo "Error: " . $e->getMessage() . "\n";
+}
+
+$lab = new Lab("Blood Panel", 25.00, $con);
+// $lab->store();
+// $lab->addComponent(new LabComponent("Hct", "%", $con));
+// $lab->addComponent(new LabComponent("RBC", "count", $con));
+
+$patient = new Patient('Smoker', 'Doker', '2025-01-01', 'Plz Street', '23898203982', 'smokersrus@gmail.com', $con);
+$physician = new Physician('Nick', 'J', 'Van Wagoner', 'Dr', '555-555-5555', 'vanwagoner@uab.edu', 'Infectious Disease', $con);
+$date_ordered = "2017-03-14";
+
+$lab_order = new LabOrder($lab, $patient, $physician, $date_ordered, $con);
+$lab_component = new LabComponent("Hct", "%", $con);
+// $lab_order->createLabOrder();
+$lab_order->addResult($lab_component, 45, "%", "2017-03-15");
+;
+
+/**
+ *  - createLabOrder*
+ *  - deleteLabOrder*
+ *  - addResult
+ *  - changePhysician
+ *  - changePatient
+ *  - changeDateOrdered
+ *  - getDateResults
+ *  - changeDateResults
+ *  - getValue
+ *  - changeValue
+ *  - getUnits
+ *  - changeUnits
+ */
